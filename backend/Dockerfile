@@ -2,7 +2,7 @@
 # ║   CloudPilot Backend — Write your Dockerfile!       ║
 # ║                                                      ║
 # ║  Hints:                                              ║
-# ║   • Base image: node:20-alpine                       ║
+# ║   • Base image: node:20-slim                         ║
 # ║   • Working dir: /app                                ║
 # ║   • Install deps: npm ci --omit=dev                  ║
 # ║   • App port: 3000                                   ║

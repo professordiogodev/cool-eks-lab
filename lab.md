@@ -209,7 +209,7 @@ location /api/ {
 ### 2.1 Backend Dockerfile
 
 Open `backend/Dockerfile`. Your goals:
-- Use `node:20-alpine` as the base
+- Use `node:20-slim` as the base
 - Set `/app` as working directory
 - Install **only production** dependencies (`npm ci --omit=dev`)
 - Expose port **3000**
