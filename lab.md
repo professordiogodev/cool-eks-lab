@@ -65,23 +65,23 @@ https://github.com/professordiogodev/cool-eks-lab
 ┌───────────────────────────────────────────────────────────────┐
 │                  EKS CLUSTER  ·  us-east-1                    │
 │                                                               │
-│  ┌──────────────────────┐          ┌──────────────────────┐  │
-│  │  frontend-service    │          │  backend-service     │  │
-│  │  type: LoadBalancer  │          │  type: ClusterIP     │  │
-│  └──────────┬───────────┘          └──────────┬───────────┘  │
-│             │                                 │              │
-│             ▼                                 ▼              │
-│  ┌──────────────────────┐          ┌──────────────────────┐  │
-│  │   frontend Pod       │──/api/*─▶│   backend Pod        │  │
-│  │   nginx:alpine       │          │   node:20-alpine     │  │
-│  │                      │          │                      │  │
-│  │   serves index.html  │          │   GET /api/status    │  │
-│  │   proxies /api/ ─────┼─────────▶│   GET /api/facts     │  │
-│  └──────────────────────┘          │   GET /api/vibe      │  │
-│                                    │   GET /api/health    │  │
-│                                    └──────────────────────┘  │
+│  ┌──────────────────────┐          ┌──────────────────────┐   │
+│  │  frontend-service    │          │  backend-service     │   │
+│  │  type: LoadBalancer  │          │  type: ClusterIP     │   │
+│  └──────────┬───────────┘          └──────────┬───────────┘   │
+│             │                                 │               │
+│             ▼                                 ▼               │
+│  ┌──────────────────────┐          ┌──────────────────────┐   │
+│  │   frontend Pod       │──/api/*─▶│   backend Pod        │   │
+│  │   nginx:alpine       │          │   node:20-alpine     │   │
+│  │                      │          │                      │   │
+│  │   serves index.html  │          │   GET /api/status    │   │
+│  │   proxies /api/ ─────┼─────────▶│   GET /api/facts     │   │
+│  └──────────────────────┘          │   GET /api/vibe      │   │
+│                                    │   GET /api/health    │   │
+│                                    └──────────────────────┘   │
 │                                                               │
-│  ▪ EC2 worker-1 (t3.small)       ▪ EC2 worker-2 (t3.small)  │
+│  ▪ EC2 worker-1 (t3.small)       ▪ EC2 worker-2 (t3.small)    │
 └───────────────────────────────────────────────────────────────┘
 
   🦆 DuckDNS (bonus): yourname.duckdns.org ──resolves──▶ ELB IP
