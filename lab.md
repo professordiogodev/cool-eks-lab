@@ -18,10 +18,15 @@ https://github.com/professordiogodev/cool-eks-lab
 
 # ☁️ EKS Lab — Deploy to the Internet
 
-> **Mission:** Deploy two microservices (frontend + backend) to an **AWS EKS cluster**,
+> **Mission:** Deploy two microservices (frontend + backend) to your **AWS EKS cluster**,
 > expose them publicly via an **Elastic Load Balancer**, and optionally wire up a
 > free domain with **DuckDNS**. If your app is reachable from the public internet
 > → **confetti rains from the sky** 🎉. If not → **#sad** 😭.
+>
+
+> [!NOTE]
+> **This lab assumes you already have a running EKS cluster** with your `kubectl`
+> context pointed at it. If you still need to create one, ask your instructor.
 >
 
 ---
@@ -30,16 +35,15 @@ https://github.com/professordiogodev/cool-eks-lab
 
 | Phase | Task | Est. Time |
 | --- | --- | --- |
-| 0. Setup | Install tools, configure AWS | 15 min |
-| 1. Create EKS Cluster | eksctl create cluster | 20 min |
-| 2. Understand the code | Read backend + frontend | 15 min |
-| 3. Containerize | Write Dockerfiles | 20 min |
-| 4. Publish Images | Push to ECR or DockerHub | 15 min |
-| 5. Manifests | Update image references | 10 min |
-| 6. Deploy | kubectl apply + watch | 10 min |
-| 7. Go Online! | Get ELB URL, open in browser | 10 min |
-| 8. DuckDNS | Free custom subdomain | 15 min |
-| 9. Teardown | Delete cluster, avoid AWS bills | 5 min |
+| 0. Verify | Confirm kubectl → EKS connection | 5 min |
+| 1. Understand the code | Read backend + frontend | 15 min |
+| 2. Containerize | Write Dockerfiles | 20 min |
+| 3. Publish Images | Push to ECR or DockerHub | 15 min |
+| 4. Manifests | Update image references | 10 min |
+| 5. Deploy | kubectl apply + watch | 10 min |
+| 6. Go Online! | Get ELB URL, open in browser | 10 min |
+| 7. DuckDNS | Free custom subdomain | 15 min |
+| 8. Teardown | Delete workloads, avoid leftover costs | 5 min |
 | Bonus | Scale, HPA, Ingress, HTTPS | optional |
 
 ---
@@ -47,52 +51,47 @@ https://github.com/professordiogodev/cool-eks-lab
 ## 🏗️ Architecture
 
 ```
-                    THE INTERNET
-                        │
-                        │  http://YOUR_ELB_HOSTNAME
-                        ▼
-              ┌─────────────────────┐
-              │  AWS Elastic Load   │
-              │  Balancer (ELB)     │
-              └──────────┬──────────┘
-                         │ :80
-                         ▼
-┌────────────────────────────────────────────────────────────┐
-│                  EKS CLUSTER (us-east-1)                   │
-│                                                            │
-│  ┌──────────────────────────────────────────────────────┐  │
-│  │               default namespace                      │  │
-│  │                                                      │  │
-│  │   ┌──────────────────┐      ┌───────────────────┐   │  │
-│  │   │  frontend-service│      │  backend-service  │   │  │
-│  │   │  (LoadBalancer)  │      │  (ClusterIP :3000)│   │  │
-│  │   └────────┬─────────┘      └────────┬──────────┘   │  │
-│  │            │                         │              │  │
-│  │            ▼                         ▼              │  │
-│  │   ┌──────────────────┐   ┌──────────────────────┐  │  │
-│  │   │  frontend Pod    │──▶│     backend Pod      │  │  │
-│  │   │  nginx:alpine    │   │     node:20-alpine   │  │  │
-│  │   │                  │   │                      │  │  │
-│  │   │  index.html      │   │  GET /api/status     │  │  │
-│  │   │  nginx.conf      │   │  GET /api/facts      │  │  │
-│  │   └──────────────────┘   │  GET /api/vibe       │  │  │
-│  │        /api/ proxy       │  GET /api/health     │  │  │
-│  │   ──────────────────────▶│                      │  │  │
-│  │                          └──────────────────────┘  │  │
-│  └──────────────────────────────────────────────────┘  │  │
-│                                                         │  │
-│   EC2 Node (t3.small)    EC2 Node (t3.small)           │  │
-└─────────────────────────────────────────────────────────┘  │
-                                                              │
-                         DuckDNS (bonus)                      │
-              yourname.duckdns.org ──▶ ELB IP                 │
+                        THE INTERNET
+                             │
+                   http://your-elb.amazonaws.com
+                             │
+                             ▼
+                  ┌──────────────────────┐
+                  │  AWS Elastic Load    │
+                  │  Balancer  (ELB)     │
+                  └──────────┬───────────┘
+                             │ :80
+                             ▼
+┌───────────────────────────────────────────────────────────────┐
+│                  EKS CLUSTER  ·  us-east-1                    │
+│                                                               │
+│  ┌──────────────────────┐          ┌──────────────────────┐  │
+│  │  frontend-service    │          │  backend-service     │  │
+│  │  type: LoadBalancer  │          │  type: ClusterIP     │  │
+│  └──────────┬───────────┘          └──────────┬───────────┘  │
+│             │                                 │              │
+│             ▼                                 ▼              │
+│  ┌──────────────────────┐          ┌──────────────────────┐  │
+│  │   frontend Pod       │──/api/*─▶│   backend Pod        │  │
+│  │   nginx:alpine       │          │   node:20-alpine     │  │
+│  │                      │          │                      │  │
+│  │   serves index.html  │          │   GET /api/status    │  │
+│  │   proxies /api/ ─────┼─────────▶│   GET /api/facts     │  │
+│  └──────────────────────┘          │   GET /api/vibe      │  │
+│                                    │   GET /api/health    │  │
+│                                    └──────────────────────┘  │
+│                                                               │
+│  ▪ EC2 worker-1 (t3.small)       ▪ EC2 worker-2 (t3.small)  │
+└───────────────────────────────────────────────────────────────┘
+
+  🦆 DuckDNS (bonus): yourname.duckdns.org ──resolves──▶ ELB IP
 ```
 
 ### How requests flow
 
 ```
-Browser  ──GET /──────────────▶  ELB  ──▶  frontend nginx  ──▶  index.html
-Browser  ──GET /api/status──────▶  ELB  ──▶  frontend nginx  ──proxy──▶  backend:3000/api/status
+Browser  GET /           ──▶  ELB  ──▶  nginx (frontend)  ──▶  index.html
+Browser  GET /api/status ──▶  ELB  ──▶  nginx (frontend)  ──▶  backend:3000/api/status
 ```
 
 The frontend nginx proxies every `/api/*` request to `backend-service:3000`.
@@ -101,94 +100,57 @@ The backend **never needs to be publicly exposed** — only the frontend ELB is 
 
 ---
 
-## 🛠️ Phase 0: Setup & Prerequisites
+## ✅ Phase 0: Verify Your Cluster
 
 ### What you need installed
 
-| Tool | Version | Install / check |
+| Tool | Version | Check |
 | --- | --- | --- |
-| AWS CLI | ≥ 2.x | `brew install awscli` · `aws --version` |
-| eksctl | ≥ 0.170 | `brew tap weaveworks/tap && brew install eksctl` · `eksctl version` |
-| kubectl | ≥ 1.28 | `brew install kubectl` · `kubectl version --client` |
-| Docker | ≥ 24 | `brew install --cask docker` · `docker --version` |
+| AWS CLI | ≥ 2.x | `aws --version` |
+| kubectl | ≥ 1.28 | `kubectl version --client` |
+| Docker | ≥ 24 | `docker --version` |
 | Node.js | ≥ 20 (local testing only) | `node --version` |
 
-### Configure AWS credentials
-
-You need an IAM user or role with permissions to create EKS clusters, VPCs, EC2 instances, IAM roles, and ECR repos. For a lab, `AdministratorAccess` is simplest.
+### Confirm kubectl is pointing at your EKS cluster
 
 ```bash
-aws configure
-# AWS Access Key ID:     YOUR_ACCESS_KEY
-# AWS Secret Access Key: YOUR_SECRET_KEY
-# Default region name:   us-east-1
-# Default output format: json
-
-# Verify it works:
-aws sts get-caller-identity
+kubectl config current-context
+# Should show something like: arn:aws:eks:us-east-1:123456789:cluster/cloudpilot-cluster
 ```
-
-You should see your account ID and user ARN. If this fails, check your credentials.
-
-> [!WARNING]
-> **Never commit AWS credentials to git.** Use `aws configure` which stores them in
-> `~/.aws/credentials`, not in your project files. Always rotate short-lived keys.
->
-
----
-
-## 🌐 Phase 1: Create Your EKS Cluster
-
-> [!WARNING]
-> **EKS costs money.** The control plane is ~$0.10/hr. Two t3.small nodes add ~$0.046/hr.
-> Total: ~$0.15/hr (~$3.50/day). **Run Phase 9 (Teardown) when done!**
->
-
-### 1.1 Create the cluster with eksctl
-
-The config file is ready at `eksctl/cluster.yaml`. It provisions:
-- A managed EKS control plane in `us-east-1`
-- A managed node group with 2 × `t3.small` EC2 workers
-- All necessary VPC, subnets, security groups, and IAM roles
-
-```bash
-eksctl create cluster -f eksctl/cluster.yaml
-```
-
-This takes **15–20 minutes**. Go grab a coffee. ☕
-
-When it finishes, eksctl automatically updates your `~/.kube/config`:
 
 ```bash
 kubectl get nodes
 # NAME                                          STATUS   ROLES    AGE
-# ip-192-168-xx-xx.us-east-1.compute.internal   Ready    <none>   2m
-# ip-192-168-xx-xx.us-east-1.compute.internal   Ready    <none>   2m
+# ip-192-168-xx-xx.us-east-1.compute.internal   Ready    <none>   5m
+# ip-192-168-xx-xx.us-east-1.compute.internal   Ready    <none>   5m
 ```
 
-Both nodes should be `Ready` before continuing.
+Both nodes must be `Ready` before continuing. If they're not, ask your instructor.
 
-### 1.2 Verify cluster access
+### Grab your AWS account and region
 
 ```bash
-kubectl cluster-info
-kubectl get pods -A   # system pods in kube-system namespace
+export AWS_REGION=$(aws configure get region)
+export AWS_ACCOUNT=$(aws sts get-caller-identity --query Account --output text)
+
+echo "Account : $AWS_ACCOUNT"
+echo "Region  : $AWS_REGION"
 ```
 
-> [!NOTE]
-> Notice `coredns`, `aws-node`, and `kube-proxy` pods running in `kube-system`.
-> These are the EKS cluster add-ons that were automatically installed.
+Keep these in your terminal — you'll use them in Phase 3.
+
+> [!WARNING]
+> **Never commit AWS credentials to git.** Your credentials live in `~/.aws/credentials`
+> and should never appear in project files.
 >
 
 ---
 
-## 📖 Phase 2: Understand the Codebase
+## 📖 Phase 1: Understand the Codebase
 
 ```
 cool-eks-lab/
 ├── lab.md                   ← you are here
-├── eksctl/
-│   └── cluster.yaml         ← EKS cluster definition
 ├── backend/
 │   ├── index.js             ← Express API (read this!)
 │   ├── package.json
@@ -205,7 +167,7 @@ cool-eks-lab/
     └── duckdns-cronjob.yaml     ← bonus: auto-update DuckDNS
 ```
 
-### 2.1 Backend (`backend/index.js`)
+### 1.1 Backend (`backend/index.js`)
 
 A tiny **Node.js + Express** API with four routes:
 
@@ -221,7 +183,7 @@ A tiny **Node.js + Express** API with four routes:
 > frontend can display which region your cluster is in.
 >
 
-### 2.2 Frontend (`frontend/index.html`)
+### 1.2 Frontend (`frontend/index.html`)
 
 A self-contained single-page app that:
 
@@ -230,7 +192,7 @@ A self-contained single-page app that:
 3. **If connected** → confetti and rectangle rain, animated AWS-orange dashboard
 4. **If not connected** → grayscale filter, sad shaking emoji, EKS debug commands
 
-### 2.3 nginx config (`frontend/nginx.conf`)
+### 1.3 nginx config (`frontend/nginx.conf`)
 
 ```nginx
 location /api/ {
@@ -238,13 +200,13 @@ location /api/ {
 }
 ```
 
-Same pattern as the local K8s lab. `backend-service` resolves inside EKS via Kubernetes DNS.
+`backend-service` resolves inside EKS via Kubernetes DNS — same pattern as local K8s, but now it's on the internet.
 
 ---
 
-## 🐳 Phase 3: Containerize
+## 🐳 Phase 2: Containerize
 
-### 3.1 Backend Dockerfile
+### 2.1 Backend Dockerfile
 
 Open `backend/Dockerfile`. Your goals:
 - Use `node:20-alpine` as the base
@@ -253,7 +215,7 @@ Open `backend/Dockerfile`. Your goals:
 - Expose port **3000**
 - Start with `node index.js`
 
-### 3.2 Frontend Dockerfile
+### 2.2 Frontend Dockerfile
 
 Open `frontend/Dockerfile`. Your goals:
 - Use `nginx:alpine` as the base
@@ -261,7 +223,7 @@ Open `frontend/Dockerfile`. Your goals:
 - Copy `nginx.conf` → `/etc/nginx/conf.d/default.conf`
 - Expose port **80**
 
-### 3.3 Verify locally before pushing
+### 2.3 Verify locally before pushing
 
 ```bash
 # ── Backend ──────────────────────────────────────────────────────────────────
@@ -293,23 +255,20 @@ cd ..
 
 ---
 
-## ☁️ Phase 4: Publish Your Images
+## ☁️ Phase 3: Publish Your Images
 
 You have two options. **ECR is the AWS-native choice** (no rate limits, works seamlessly with EKS); DockerHub also works fine for labs.
 
 ### Option A — ECR (recommended)
 
-#### 4A.1 Create ECR repositories
+#### 3A.1 Create ECR repositories
 
 ```bash
-export AWS_REGION=us-east-1
-export AWS_ACCOUNT=$(aws sts get-caller-identity --query Account --output text)
-
 aws ecr create-repository --repository-name cloudpilot-backend  --region $AWS_REGION
 aws ecr create-repository --repository-name cloudpilot-frontend --region $AWS_REGION
 ```
 
-#### 4A.2 Authenticate Docker to ECR
+#### 3A.2 Authenticate Docker to ECR
 
 ```bash
 aws ecr get-login-password --region $AWS_REGION \
@@ -317,7 +276,7 @@ aws ecr get-login-password --region $AWS_REGION \
     ${AWS_ACCOUNT}.dkr.ecr.${AWS_REGION}.amazonaws.com
 ```
 
-#### 4A.3 Build, tag & push
+#### 3A.3 Build, tag & push
 
 ```bash
 ECR_BASE="${AWS_ACCOUNT}.dkr.ecr.${AWS_REGION}.amazonaws.com"
@@ -331,7 +290,7 @@ docker build -t ${ECR_BASE}/cloudpilot-frontend:v1 ./frontend
 docker push     ${ECR_BASE}/cloudpilot-frontend:v1
 ```
 
-#### 4A.4 Confirm images in ECR
+#### 3A.4 Confirm images in ECR
 
 ```bash
 aws ecr list-images --repository-name cloudpilot-backend  --region $AWS_REGION
@@ -354,7 +313,7 @@ docker push     YOUR_USERNAME/cloudpilot-frontend:v1
 
 ---
 
-## ⎈ Phase 5: Update Kubernetes Manifests
+## ⎈ Phase 4: Update Kubernetes Manifests
 
 Open `k8s/backend-deployment.yaml` and `k8s/frontend-deployment.yaml`.
 Find the `image:` line and replace `YOUR_REGISTRY`:
@@ -368,8 +327,8 @@ image: YOUR_USERNAME/cloudpilot-backend:v1
 ```
 
 > [!NOTE]
-> Also update the `AWS_REGION` env var in `backend-deployment.yaml` if you used
-> a different region. This is what the frontend displays in the dashboard.
+> Also update the `AWS_REGION` env var in `backend-deployment.yaml` to match your
+> actual cluster region. This is what the frontend displays in the dashboard.
 >
 
 ### Study the manifests (quiz yourself!)
@@ -382,18 +341,9 @@ image: YOUR_USERNAME/cloudpilot-backend:v1
 
 ---
 
-## 🚀 Phase 6: Deploy to EKS
+## 🚀 Phase 5: Deploy to EKS
 
-### 6.1 Apply all manifests
-
-```bash
-kubectl apply -f k8s/backend-deployment.yaml
-kubectl apply -f k8s/backend-service.yaml
-kubectl apply -f k8s/frontend-deployment.yaml
-kubectl apply -f k8s/frontend-service.yaml
-```
-
-Or all at once (skipping the DuckDNS CronJob for now):
+### 5.1 Apply all manifests
 
 ```bash
 kubectl apply -f k8s/backend-deployment.yaml \
@@ -402,7 +352,7 @@ kubectl apply -f k8s/backend-deployment.yaml \
               -f k8s/frontend-service.yaml
 ```
 
-### 6.2 Watch pods come up
+### 5.2 Watch pods come up
 
 ```bash
 kubectl get pods -w
@@ -424,9 +374,9 @@ frontend-xxxxx-yyyyy        1/1     Running   0
 
 ---
 
-## 🌍 Phase 7: Go Online!
+## 🌍 Phase 6: Go Online!
 
-### 7.1 Get your public ELB hostname
+### 6.1 Get your public ELB hostname
 
 ```bash
 kubectl get svc frontend-service
@@ -439,7 +389,7 @@ frontend-service   LoadBalancer   10.100.xx.xx   a1b2c3d4.us-east-1.elb.amazonaw
 
 The `EXTERNAL-IP` column shows your ELB hostname. It may say `<pending>` for 1–3 minutes while AWS provisions the load balancer — that's normal.
 
-### 7.2 Save the ELB hostname as a variable
+### 6.2 Save the ELB hostname as a variable
 
 ```bash
 ELB=$(kubectl get svc frontend-service \
@@ -447,14 +397,14 @@ ELB=$(kubectl get svc frontend-service \
 echo "Your app is live at: http://$ELB"
 ```
 
-### 7.3 Test it from your terminal
+### 6.3 Test it from your terminal
 
 ```bash
 curl -s http://$ELB/api/health | python3 -m json.tool
 curl -s http://$ELB/api/status | python3 -m json.tool
 ```
 
-### 7.4 Open it in your browser
+### 6.4 Open it in your browser
 
 ```
 http://YOUR_ELB_HOSTNAME
@@ -465,25 +415,25 @@ If you see the orange CloudPilot dashboard with **confetti raining down** and th
 
 > [!NOTE]
 > DNS propagation for the ELB hostname can take a few minutes. If you get
-> "could not connect", wait 2–3 minutes and refresh. You can also verify with:
+> "could not connect", wait 2–3 minutes and refresh. You can verify with:
 > `nslookup $ELB`
 >
 
 ---
 
-## 🦆 Phase 8: DuckDNS — Get a Free Custom Domain
+## 🦆 Phase 7: DuckDNS — Get a Free Custom Domain
 
 Right now your app is at a long, ugly ELB hostname. Let's give it a friendly name
 like `yourname.duckdns.org` — for free.
 
-### 8.1 Register a DuckDNS subdomain
+### 7.1 Register a DuckDNS subdomain
 
 1. Go to **https://www.duckdns.org**
 2. Log in with Google, GitHub, or Reddit
 3. Choose a subdomain (e.g., `cloudpilot-demo`)
 4. Copy your **token** from the dashboard (it's a UUID)
 
-### 8.2 Find the current IP of your ELB
+### 7.2 Find the current IP of your ELB
 
 ELBs have a hostname, not a static IP. We need to resolve it:
 
@@ -497,10 +447,10 @@ echo "ELB IP: $ELB_IP"
 ```
 
 > [!NOTE]
-> ELB IPs can change. That's why we set up a CronJob to update DuckDNS automatically.
+> ELB IPs can change over time. That's why we set up a CronJob to keep DuckDNS in sync.
 >
 
-### 8.3 Update DuckDNS manually (first time)
+### 7.3 Update DuckDNS manually (first time)
 
 ```bash
 DUCKDNS_DOMAIN="YOUR_SUBDOMAIN"   # e.g. cloudpilot-demo
@@ -512,12 +462,12 @@ curl -s "https://www.duckdns.org/update?domains=${DUCKDNS_DOMAIN}&token=${DUCKDN
 
 If you get `OK`, your domain is live. Open `http://YOUR_SUBDOMAIN.duckdns.org` in a browser.
 
-### 8.4 Deploy the auto-updater CronJob
+### 7.4 Deploy the auto-updater CronJob
 
-Since ELB IPs can change, let's deploy a CronJob that refreshes DuckDNS every 5 minutes:
+Since ELB IPs can change, deploy a CronJob that refreshes DuckDNS every 5 minutes:
 
 ```bash
-# Edit the file first — fill in ELB_HOSTNAME, DUCKDNS_DOMAIN, and token
+# Edit the file — fill in ELB_HOSTNAME, DUCKDNS_DOMAIN, and token
 nano k8s/duckdns-cronjob.yaml
 
 kubectl apply -f k8s/duckdns-cronjob.yaml
@@ -526,20 +476,20 @@ kubectl apply -f k8s/duckdns-cronjob.yaml
 Verify it runs:
 
 ```bash
-# Wait up to 5 minutes for the first run, or trigger manually:
-kubectl create job --from=cronjob/duckdns-updater duckdns-manual-test
+# Trigger the first run manually instead of waiting 5 minutes:
+kubectl create job --from=cronjob/duckdns-updater duckdns-test
 
-# Watch the job:
+# Watch it complete:
 kubectl get pods -w
 
-# Check the logs:
-kubectl logs job/duckdns-manual-test
+# Check the output:
+kubectl logs job/duckdns-test
 # Expected: "DuckDNS update → yourname.duckdns.org = 1.2.3.4 (response: OK)"
 ```
 
 ---
 
-## 🎉 Phase 7/8 Results
+## 🎉 Did You Get Confetti or Sad?
 
 ### ✅ Confetti means:
 
@@ -569,7 +519,7 @@ kubectl exec -it deploy/frontend -- wget -qO- http://backend-service:3000/api/he
 # Step 5: Check the nginx proxy config inside the container
 kubectl exec -it deploy/frontend -- cat /etc/nginx/conf.d/default.conf
 
-# Step 6: Describe the service to see if it has endpoints
+# Step 6: Check service endpoints
 kubectl describe service backend-service
 kubectl describe service frontend-service
 ```
@@ -588,33 +538,28 @@ kubectl describe service frontend-service
 
 ---
 
-## 🗑️ Phase 9: Teardown — Don't Let AWS Bill You!
+## 🗑️ Phase 8: Teardown
 
-When you're done with the lab, delete everything to stop charges.
+Clean up your workloads when done so you don't leave resources running.
 
 ```bash
-# Delete K8s resources first (removes ELB before cluster deletion)
+# Delete all lab workloads (also removes the ELB!)
 kubectl delete -f k8s/
 
-# Delete the EKS cluster and all associated AWS resources
-eksctl delete cluster --name cloudpilot-cluster --region us-east-1
+# Verify pods and services are gone:
+kubectl get pods
+kubectl get svc
 ```
-
-This takes 10–15 minutes. Verify in the AWS Console:
-- EC2 → Load Balancers: should be empty
-- CloudFormation: EKS stacks should be deleting/deleted
-- ECR: repositories remain (no cost unless you have stored images > 500MB free tier)
 
 ```bash
-# Optional: delete ECR repos too
-aws ecr delete-repository --repository-name cloudpilot-backend  --force --region us-east-1
-aws ecr delete-repository --repository-name cloudpilot-frontend --force --region us-east-1
+# Optional: delete ECR repos
+aws ecr delete-repository --repository-name cloudpilot-backend  --force --region $AWS_REGION
+aws ecr delete-repository --repository-name cloudpilot-frontend --force --region $AWS_REGION
 ```
 
-> [!WARNING]
-> If the cluster deletion gets stuck, it's usually because the ELB still exists.
-> Go to AWS Console → EC2 → Load Balancers and manually delete the ELB first,
-> then retry `eksctl delete cluster`.
+> [!NOTE]
+> This only deletes the K8s resources and ECR images you created.
+> The EKS cluster itself is shared — your instructor manages that.
 >
 
 ---
@@ -622,9 +567,8 @@ aws ecr delete-repository --repository-name cloudpilot-frontend --force --region
 ## 💡 What You Just Built
 
 ```
-✅ AWS EKS cluster provisioned with eksctl (VPC, subnets, IAM — all automated)
 ✅ Two containerized microservices published to ECR (or DockerHub)
-✅ Running as Kubernetes Pods with liveness and readiness health checks
+✅ Running as Kubernetes Pods on EKS with liveness and readiness health checks
 ✅ Connected via Kubernetes DNS (no IPs, just service names!)
 ✅ Frontend served by nginx with reverse proxy to backend
 ✅ Publicly exposed via AWS Elastic Load Balancer — live on the internet!
@@ -669,7 +613,7 @@ kubectl get hpa -w
 Generate load to trigger scaling:
 
 ```bash
-# In a separate terminal — blast the backend with requests
+# Blast the backend with requests from inside the cluster
 kubectl run -it --rm load --image=busybox --restart=Never -- \
   sh -c 'while true; do wget -q -O- http://backend-service:3000/api/health; done'
 ```
@@ -702,19 +646,9 @@ Once done, your app will be accessible at `https://yourname.duckdns.org`.
 
 ### ⭐⭐⭐⭐ Level 6 — Fargate profile
 
-Add a Fargate profile to your eksctl config and move the backend to run on Fargate
-(no EC2 nodes — fully serverless pods):
-
-```yaml
-fargateProfiles:
-  - name: backend-fargate
-    selectors:
-      - namespace: default
-        labels:
-          workload: fargate
-```
-
-Label the backend pods `workload: fargate` and watch them schedule on Fargate nodes.
+Ask your instructor to add a Fargate profile to the cluster, then move the backend
+to run on Fargate (no EC2 nodes — fully serverless pods). Label the backend pods
+`workload: fargate` and watch them schedule on Fargate nodes.
 
 ---
 
@@ -729,17 +663,6 @@ aws ecr get-login-password | docker login --username AWS \
   --password-stdin ACCOUNT.dkr.ecr.REGION.amazonaws.com # ECR auth
 aws ecr create-repository --repository-name NAME         # create ECR repo
 aws ecr list-images --repository-name NAME               # list pushed images
-```
-
-### eksctl
-
-```bash
-eksctl create cluster -f eksctl/cluster.yaml             # create cluster from config
-eksctl delete cluster --name NAME --region REGION        # delete cluster (and all resources!)
-eksctl get cluster --region REGION                       # list clusters
-eksctl get nodegroup --cluster NAME --region REGION      # list node groups
-eksctl scale nodegroup --cluster NAME --name workers \
-  --nodes 3 --region REGION                              # scale node group
 ```
 
 ### kubectl
@@ -767,13 +690,12 @@ kubectl get svc frontend-service -o \
 | Concept | One-liner |
 | --- | --- |
 | **EKS** | AWS's managed Kubernetes — you own the nodes, AWS runs the control plane |
-| **eksctl** | CLI that provisions a full EKS cluster in one command |
 | **ECR** | AWS's managed container registry — no rate limits, native EKS auth |
 | **LoadBalancer Service** | Tells EKS to provision an AWS ELB and route traffic to your pods |
 | **ClusterIP Service** | Internal-only service — reachable by name inside the cluster, not from internet |
 | **ELB** | AWS Elastic Load Balancer — the public entry point for your cluster traffic |
 | **IAM Role** | AWS permission system — nodes need IAM roles to pull from ECR, manage ELBs |
-| **VPC** | The private network your EKS cluster lives in — eksctl creates it automatically |
+| **VPC** | The private network your EKS cluster lives in |
 | **Downward API** | Mechanism to inject Pod/Node metadata as env vars at runtime |
 | **DuckDNS** | Free dynamic DNS — maps a friendly subdomain to your ELB's IP |
 | **CronJob** | Kubernetes resource that runs a Pod on a schedule (like cron but in the cluster) |
