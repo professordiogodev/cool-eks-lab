@@ -1,0 +1,16 @@
+apiVersion: v1
+kind: Service
+metadata:
+  # This name is CRITICAL — the frontend nginx proxies to "backend-service"
+  # Changing it requires rebuilding the frontend image.
+  name: backend-service
+spec:
+  selector:
+    app: backend
+  ports:
+    - protocol: TCP
+      port: 3000
+      targetPort: 3000
+  # ClusterIP = internal only. The backend is NOT directly exposed to the internet.
+  # Traffic flows: Internet → ELB → frontend Pod → nginx proxy → backend-service
+  type: ClusterIP

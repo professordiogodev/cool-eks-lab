@@ -1,0 +1,32 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: frontend
+  labels:
+    app: frontend
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: frontend
+  template:
+    metadata:
+      labels:
+        app: frontend
+    spec:
+      containers:
+        - name: frontend
+          # TODO: replace YOUR_REGISTRY with your ECR URI or DockerHub username
+          # ECR format:  123456789.dkr.ecr.us-east-1.amazonaws.com/cloudpilot-frontend:v1
+          # DockerHub:   YOUR_DOCKERHUB_USERNAME/cloudpilot-frontend:v1
+          image: YOUR_REGISTRY/cloudpilot-frontend:v1
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 80
+          resources:
+            requests:
+              memory: "32Mi"
+              cpu: "25m"
+            limits:
+              memory: "64Mi"
+              cpu: "100m"

@@ -1,0 +1,79 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# DuckDNS Auto-Updater — BONUS Phase
+#
+# This CronJob resolves your ELB hostname to an IP and updates DuckDNS every
+# 5 minutes, keeping your free subdomain pointing at the cluster.
+#
+# Setup steps:
+#   1. Register at https://www.duckdns.org and get a free subdomain + token
+#   2. Get your ELB hostname:
+#        kubectl get svc frontend-service -o jsonpath='{.status.loadBalancer.ingress[0].hostname}'
+#   3. Edit the ConfigMap below (ELB_HOSTNAME and DUCKDNS_DOMAIN)
+#   4. Edit the Secret below (token)
+#   5. kubectl apply -f k8s/duckdns-cronjob.yaml
+# ─────────────────────────────────────────────────────────────────────────────
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: duckdns-config
+data:
+  # Paste your full ELB hostname here (no https://, no trailing slash)
+  ELB_HOSTNAME: "REPLACE_WITH_YOUR_ELB_HOSTNAME"
+  # Just the subdomain part, e.g. "mycluster" for mycluster.duckdns.org
+  DUCKDNS_DOMAIN: "REPLACE_WITH_YOUR_SUBDOMAIN"
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: duckdns-secret
+type: Opaque
+stringData:
+  token: "REPLACE_WITH_YOUR_DUCKDNS_TOKEN"
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: duckdns-updater
+spec:
+  schedule: "*/5 * * * *"
+  concurrencyPolicy: Forbid
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          restartPolicy: OnFailure
+          containers:
+            - name: updater
+              image: alpine:3.19
+              command: ["/bin/sh", "-c"]
+              args:
+                - |
+                  set -e
+                  apk add --no-cache curl bind-tools > /dev/null 2>&1
+                  IP=$(dig +short "$ELB_HOSTNAME" | grep -E '^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$' | head -1)
+                  if [ -z "$IP" ]; then
+                    echo "ERROR: could not resolve $ELB_HOSTNAME — ELB may still be provisioning"
+                    exit 1
+                  fi
+                  RESP=$(curl -sf "https://www.duckdns.org/update?domains=${DUCKDNS_DOMAIN}&token=${DUCKDNS_TOKEN}&ip=${IP}")
+                  echo "DuckDNS update → ${DUCKDNS_DOMAIN}.duckdns.org = ${IP} (response: ${RESP})"
+              env:
+                - name: ELB_HOSTNAME
+                  valueFrom:
+                    configMapKeyRef:
+                      name: duckdns-config
+                      key: ELB_HOSTNAME
+                - name: DUCKDNS_DOMAIN
+                  valueFrom:
+                    configMapKeyRef:
+                      name: duckdns-config
+                      key: DUCKDNS_DOMAIN
+                - name: DUCKDNS_TOKEN
+                  valueFrom:
+                    secretKeyRef:
+                      name: duckdns-secret
+                      key: token
+              resources:
+                limits:
+                  memory: "32Mi"
+                  cpu: "50m"

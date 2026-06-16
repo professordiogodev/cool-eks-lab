@@ -1,0 +1,626 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>☁️ EKS Launch Control — CloudPilot</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Share+Tech+Mono&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --orange: #FF9900;
+      --blue:   #00aaff;
+      --green:  #00ff88;
+      --red:    #ff4466;
+      --purple: #aa44ff;
+      --bg:     #060810;
+    }
+
+    *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      background: var(--bg);
+      color: var(--orange);
+      font-family: 'Share Tech Mono', 'Courier New', monospace;
+      min-height: 100vh;
+      overflow-x: hidden;
+      transition: filter 1.8s ease;
+    }
+    body.sad { filter: grayscale(90%) brightness(0.55) contrast(0.9); }
+
+    /* ── canvas ── */
+    #bgCanvas { position: fixed; inset: 0; z-index: 0; pointer-events: none; }
+
+    /* ── satellite orbit ornament ── */
+    .orbit-wrap {
+      position: fixed; bottom: 28px; right: 28px;
+      width: 72px; height: 72px;
+      z-index: 10;
+    }
+    .orbit-ring {
+      position: absolute; inset: 0;
+      border: 1.5px solid rgba(255,153,0,.2);
+      border-radius: 50%;
+      animation: orbitSpin 8s linear infinite;
+    }
+    .orbit-ring:nth-child(2) {
+      inset: 8px;
+      border-color: rgba(0,170,255,.15);
+      animation-duration: 14s;
+      animation-direction: reverse;
+    }
+    .orbit-ring:nth-child(3) {
+      inset: 18px;
+      border-color: rgba(255,153,0,.25);
+      animation-duration: 5s;
+    }
+    .orbit-center {
+      position: absolute; inset: 0;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 1.8em;
+      animation: orbitBob 4s ease-in-out infinite;
+    }
+    @keyframes orbitSpin { to { transform: rotate(360deg); } }
+    @keyframes orbitBob {
+      0%,100% { transform: scale(1)    rotate(0deg); }
+      50%      { transform: scale(1.12) rotate(10deg); }
+    }
+
+    /* ── page layout ── */
+    .page {
+      position: relative; z-index: 1;
+      max-width: 1020px; margin: 0 auto;
+      padding: 52px 24px 100px;
+    }
+
+    /* ── online banner ── */
+    .online-banner {
+      display: none;
+      text-align: center; margin-bottom: 28px;
+      padding: 14px 24px; border-radius: 12px;
+      border: 1px solid rgba(0,255,136,.35);
+      background: rgba(0,255,136,.06);
+      animation: bannerGlow 2.5s ease-in-out infinite;
+    }
+    .online-banner.show { display: block; }
+    @keyframes bannerGlow {
+      0%,100% { box-shadow: 0 0 16px rgba(0,255,136,.1); }
+      50%      { box-shadow: 0 0 34px rgba(0,255,136,.28); }
+    }
+    .online-banner-text {
+      font-family: 'Orbitron', sans-serif;
+      font-size: clamp(.75em, 2.2vw, 1.05em);
+      font-weight: 700; letter-spacing: 3px;
+      color: var(--green);
+    }
+    .online-url {
+      color: rgba(255,255,255,.45); font-size: .8em;
+      letter-spacing: 1px; margin-top: 5px;
+    }
+
+    /* ── header ── */
+    .header { text-align: center; margin-bottom: 40px; }
+    .hdr-icon {
+      font-size: 5.5em; line-height: 1; display: block;
+      margin-bottom: 14px;
+      animation: floatIcon 4s ease-in-out infinite;
+    }
+    @keyframes floatIcon {
+      0%,100% { transform: translateY(0)    rotate(0deg); }
+      50%      { transform: translateY(-14px) rotate(6deg); }
+    }
+    .hdr-title {
+      font-family: 'Orbitron', sans-serif;
+      font-size: clamp(1.5em, 4.5vw, 3em);
+      font-weight: 900; letter-spacing: 4px; text-transform: uppercase;
+      background: linear-gradient(135deg,
+        #FF9900 0%, #ffcc44 20%, #00aaff 45%, #FF9900 70%, #ffcc44 100%);
+      background-size: 300% 300%;
+      -webkit-background-clip: text; background-clip: text;
+      -webkit-text-fill-color: transparent;
+      animation: gradShift 5s ease infinite;
+    }
+    @keyframes gradShift {
+      0%,100% { background-position: 0%   50%; }
+      50%      { background-position: 100% 50%; }
+    }
+    .hdr-sub {
+      color: rgba(255,255,255,.25); font-size: .8em;
+      letter-spacing: 6px; margin-top: 10px; text-transform: uppercase;
+    }
+
+    /* ── ticker ── */
+    .ticker-wrap {
+      overflow: hidden;
+      border-top: 1px solid rgba(255,153,0,.12);
+      border-bottom: 1px solid rgba(255,153,0,.12);
+      padding: 9px 0; margin-bottom: 34px;
+    }
+    .ticker-inner {
+      display: flex; gap: 52px; white-space: nowrap;
+      animation: tickerScroll 32s linear infinite;
+    }
+    @keyframes tickerScroll {
+      0%   { transform: translateX(0); }
+      100% { transform: translateX(-50%); }
+    }
+    .ti { color: rgba(255,153,0,.45); font-size: .8em; letter-spacing: 2px; }
+    .ti::before { content: '▸ '; color: var(--blue); }
+
+    /* ── card ── */
+    .card {
+      border: 1px solid rgba(255,153,0,.14);
+      border-radius: 16px; padding: 28px 32px;
+      background: rgba(255,255,255,.022);
+      backdrop-filter: blur(20px);
+      margin-bottom: 22px; position: relative; overflow: hidden;
+    }
+    .card::after {
+      content: ''; position: absolute; inset: 0; border-radius: 16px;
+      background: linear-gradient(135deg, rgba(255,153,0,.04) 0%, transparent 60%);
+      pointer-events: none;
+    }
+    .card.scan::before {
+      content: ''; position: absolute;
+      top: 0; left: 0; right: 0; height: 2px;
+      background: linear-gradient(90deg, transparent, var(--orange), transparent);
+      animation: scanLine 3s linear infinite;
+    }
+    @keyframes scanLine {
+      0%   { transform: translateX(-100%); }
+      100% { transform: translateX(100%); }
+    }
+    .card.blue  { border-color: rgba(0,170,255,.2); }
+    .card.green { border-color: rgba(0,255,136,.2); }
+
+    /* ── status row ── */
+    .status-row { display: flex; align-items: center; gap: 16px; margin-bottom: 22px; }
+    .dot {
+      width: 18px; height: 18px; border-radius: 50%; flex-shrink: 0;
+      background: var(--green);
+      box-shadow: 0 0 8px var(--green), 0 0 22px var(--green);
+      animation: dotPulse 1.3s ease-in-out infinite;
+    }
+    .dot.off { background: var(--red); box-shadow: 0 0 8px var(--red); animation: none; }
+    @keyframes dotPulse {
+      0%,100% { transform: scale(1);   opacity: 1; }
+      50%      { transform: scale(1.5); opacity: .55; }
+    }
+    .status-label {
+      font-family: 'Orbitron', sans-serif;
+      font-size: 1.1em; font-weight: 700; letter-spacing: 2px;
+    }
+    .reconnect-blink {
+      display: none; color: var(--orange); font-size: .8em;
+      letter-spacing: 2px;
+      animation: blink 1.2s step-end infinite;
+    }
+    @keyframes blink { 50% { opacity: 0; } }
+
+    /* ── info grid ── */
+    .info-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+      gap: 14px; margin-top: 20px;
+    }
+    .info-box {
+      border: 1px solid rgba(255,153,0,.1); border-radius: 10px;
+      padding: 14px 16px; background: rgba(255,153,0,.03);
+    }
+    .info-key {
+      color: rgba(255,255,255,.3); font-size: .7em;
+      letter-spacing: 3px; text-transform: uppercase; margin-bottom: 6px;
+    }
+    .info-val { color: var(--blue); font-size: .95em; word-break: break-all; }
+    .info-val.highlight { color: var(--orange); }
+
+    /* ── fact card ── */
+    .fact-label { color: var(--blue); font-size: .75em; letter-spacing: 4px; margin-bottom: 14px; }
+    .fact-body  { font-size: 1.02em; line-height: 1.8; min-height: 52px; color: rgba(255,255,255,.85); }
+    .fact-counter { color: rgba(255,255,255,.18); font-size: .72em; margin-top: 10px; text-align: right; }
+
+    /* ── vibe meter ── */
+    .vibe-label { color: var(--orange); font-size: .75em; letter-spacing: 4px; margin-bottom: 14px; }
+    .vibe-bg {
+      height: 14px; background: rgba(255,255,255,.06);
+      border-radius: 7px; overflow: hidden; margin-bottom: 12px;
+    }
+    .vibe-fill {
+      height: 100%; border-radius: 7px; width: 0%;
+      background: linear-gradient(90deg, #FF9900, #ffcc44, #00aaff);
+      transition: width 1.8s cubic-bezier(.34,1.56,.64,1);
+      box-shadow: 0 0 12px rgba(255,153,0,.4);
+    }
+    .vibe-row { display: flex; justify-content: space-between; align-items: center; }
+    .vibe-pct { font-family: 'Orbitron', sans-serif; font-size: 1.6em; color: var(--orange); }
+    .vibe-msg { color: rgba(255,255,255,.55); font-size: .85em; text-align: right; }
+
+    /* ── sad state ── */
+    .sad-box { display: none; text-align: center; padding: 28px 16px; }
+    body.sad .sad-box        { display: block; }
+    body.sad .connected-only { display: none !important; }
+
+    .sad-face {
+      font-size: 6em; display: block; margin-bottom: 16px;
+      animation: sadRock .45s ease-in-out infinite;
+    }
+    @keyframes sadRock {
+      0%,100% { transform: rotate(0deg); }
+      25%      { transform: rotate(-5deg); }
+      75%      { transform: rotate(5deg); }
+    }
+    .sad-title {
+      font-family: 'Orbitron', sans-serif;
+      font-size: 2.6em; font-weight: 900;
+      color: var(--red); letter-spacing: 5px; margin-bottom: 12px;
+      animation: glitch .08s step-end infinite;
+    }
+    @keyframes glitch {
+      0%,100% { text-shadow:  2px 0 var(--red), -2px 0 var(--blue); }
+      33%      { text-shadow: -2px 0 var(--red),  2px 0 var(--blue); }
+      66%      { text-shadow: 0 0 transparent; }
+    }
+    .sad-msg { color: rgba(255,255,255,.42); line-height: 1.8; margin-bottom: 24px; }
+    .debug-block {
+      background: rgba(255,68,102,.06); border: 1px solid rgba(255,68,102,.2);
+      border-radius: 12px; padding: 20px; text-align: left;
+      margin: 0 auto 28px; max-width: 580px;
+    }
+    .debug-block p { color: rgba(255,255,255,.32); font-size: .77em; letter-spacing: 2px; margin-bottom: 12px; }
+    .debug-block code { display: block; color: var(--red); font-size: .88em; line-height: 2.1; }
+    .btn {
+      background: transparent; border: 1px solid var(--orange);
+      color: var(--orange); font-family: 'Share Tech Mono', monospace;
+      font-size: .95em; padding: 12px 30px; border-radius: 8px;
+      cursor: pointer; letter-spacing: 3px;
+      transition: background .25s, box-shadow .25s;
+    }
+    .btn:hover { background: rgba(255,153,0,.1); box-shadow: 0 0 22px rgba(255,153,0,.3); }
+
+    /* ── footer ── */
+    .footer {
+      text-align: center; color: rgba(255,255,255,.08);
+      font-size: .72em; letter-spacing: 3px; margin-top: 48px;
+    }
+  </style>
+</head>
+<body>
+
+<canvas id="bgCanvas"></canvas>
+
+<!-- Orbiting rings ornament -->
+<div class="orbit-wrap" aria-hidden="true">
+  <div class="orbit-ring"></div>
+  <div class="orbit-ring"></div>
+  <div class="orbit-ring"></div>
+  <div class="orbit-center">☁️</div>
+</div>
+
+<div class="page">
+
+  <!-- ONLINE BANNER (shown when accessed from public URL) -->
+  <div class="online-banner" id="onlineBanner">
+    <div class="online-banner-text">🌐 &nbsp;YOU ARE LIVE ON THE INTERNET &nbsp;🌐</div>
+    <div class="online-url" id="onlineUrl"></div>
+  </div>
+
+  <!-- HEADER -->
+  <header class="header">
+    <span class="hdr-icon">☁️</span>
+    <h1 class="hdr-title">EKS Launch Control</h1>
+    <p class="hdr-sub">CloudPilot · EKS Lab · Publicly Deployed</p>
+  </header>
+
+  <!-- TICKER -->
+  <div class="ticker-wrap" aria-hidden="true">
+    <div class="ticker-inner">
+      <span class="ti">EKS CLUSTER ACTIVE</span>
+      <span class="ti">EC2 NODES RUNNING</span>
+      <span class="ti">ELB PROVISIONED</span>
+      <span class="ti">ECR IMAGES CACHED</span>
+      <span class="ti">IAM ROLES BOUND</span>
+      <span class="ti">VPC ROUTING ACTIVE</span>
+      <span class="ti">CLOUDWATCH LOGGING</span>
+      <span class="ti">AUTOSCALER WATCHING</span>
+      <span class="ti">PODS IN ORBIT</span>
+      <!-- duplicate for seamless loop -->
+      <span class="ti">EKS CLUSTER ACTIVE</span>
+      <span class="ti">EC2 NODES RUNNING</span>
+      <span class="ti">ELB PROVISIONED</span>
+      <span class="ti">ECR IMAGES CACHED</span>
+      <span class="ti">IAM ROLES BOUND</span>
+      <span class="ti">VPC ROUTING ACTIVE</span>
+      <span class="ti">CLOUDWATCH LOGGING</span>
+      <span class="ti">AUTOSCALER WATCHING</span>
+      <span class="ti">PODS IN ORBIT</span>
+    </div>
+  </div>
+
+  <!-- STATUS CARD -->
+  <div class="card scan" id="statusCard">
+    <div class="status-row">
+      <div class="dot" id="dot"></div>
+      <div class="status-label" id="statusLabel">INITIALIZING SYSTEMS...</div>
+    </div>
+    <div class="reconnect-blink" id="reconnectBlink">
+      ⟳ SCANNING FOR BACKEND SERVICE — RETRY IN PROGRESS...
+    </div>
+
+    <!-- connected content -->
+    <div class="info-grid connected-only">
+      <div class="info-box">
+        <div class="info-key">Pod Name</div>
+        <div class="info-val" id="infoPod">—</div>
+      </div>
+      <div class="info-box">
+        <div class="info-key">Namespace</div>
+        <div class="info-val" id="infoNs">—</div>
+      </div>
+      <div class="info-box">
+        <div class="info-key">Node</div>
+        <div class="info-val" id="infoNode">—</div>
+      </div>
+      <div class="info-box">
+        <div class="info-key">AWS Region</div>
+        <div class="info-val highlight" id="infoRegion">—</div>
+      </div>
+      <div class="info-box">
+        <div class="info-key">Session Uptime</div>
+        <div class="info-val" id="infoUptime">—</div>
+      </div>
+      <div class="info-box">
+        <div class="info-key">Access Type</div>
+        <div class="info-val highlight" id="infoAccess">—</div>
+      </div>
+    </div>
+
+    <!-- sad content -->
+    <div class="sad-box">
+      <span class="sad-face">😭</span>
+      <div class="sad-title">#SAD</div>
+      <p class="sad-msg">
+        Cannot reach the backend service.<br>
+        Something in your EKS cluster isn't configured correctly...
+      </p>
+      <div class="debug-block">
+        <p>// EKS DEBUG COMMANDS</p>
+        <code>kubectl get pods -n default</code>
+        <code>kubectl get services</code>
+        <code>kubectl describe svc backend-service</code>
+        <code>kubectl logs -l app=backend --tail=50</code>
+        <code>kubectl describe pod -l app=frontend</code>
+      </div>
+      <button class="btn" onclick="connect()">↺ RETRY CONNECTION</button>
+    </div>
+  </div>
+
+  <!-- FACT CARD -->
+  <div class="card blue connected-only">
+    <div class="fact-label">// AWS · EKS FACT OF THE MOMENT</div>
+    <div class="fact-body" id="factBody">Connecting to knowledge base...</div>
+    <div class="fact-counter" id="factCounter"></div>
+  </div>
+
+  <!-- VIBE METER -->
+  <div class="card green connected-only">
+    <div class="vibe-label">// CLUSTER VIBE LEVEL</div>
+    <div class="vibe-bg"><div class="vibe-fill" id="vibeBar"></div></div>
+    <div class="vibe-row">
+      <div class="vibe-pct" id="vibePct">0%</div>
+      <div class="vibe-msg" id="vibeMsg">Calculating...</div>
+    </div>
+  </div>
+
+  <footer class="footer">
+    ☁️ CLOUDPILOT · EKS LAUNCH CONTROL v1.0 · ELASTIC KUBERNETES SERVICE LAB
+  </footer>
+</div>
+
+<script>
+// ─── CANVAS / PARTICLES ──────────────────────────────────────────────────────
+const canvas = document.getElementById('bgCanvas');
+const ctx    = canvas.getContext('2d');
+let W, H;
+
+function resize() { W = canvas.width = window.innerWidth; H = canvas.height = window.innerHeight; }
+resize();
+window.addEventListener('resize', resize);
+
+// Stars
+const STAR_COUNT = 220;
+const stars = Array.from({ length: STAR_COUNT }, () => ({
+  x:     Math.random(),
+  y:     Math.random(),
+  r:     Math.random() * 1.5 + 0.2,
+  phase: Math.random() * Math.PI * 2,
+  speed: 0.005 + Math.random() * 0.01,
+}));
+
+// Particles
+let particles = [];
+let isConnected = false;
+
+const CLOUD_COLORS = ['#FF9900','#ffcc44','#00aaff','#ffffff','#ff6600','#ffdd99','#aaddff'];
+
+function mkConfetti(cx, cy, burst) {
+  return {
+    x:    burst ? cx : Math.random() * W,
+    y:    burst ? cy : -12,
+    vx:   burst ? (Math.random() - .5) * 16 : (Math.random() - .5) * 1.8,
+    vy:   burst ? (Math.random() - .5) * 16 : Math.random() * 4 + 1.5,
+    color: CLOUD_COLORS[Math.floor(Math.random() * CLOUD_COLORS.length)],
+    size:  Math.random() * 6 + 2,
+    alpha: 1,
+    decay: burst ? 0.018 : Math.random() * .006 + .003,
+    spin:  Math.random() * Math.PI * 2,
+    spinV: (Math.random() - .5) * .2,
+    isRect: Math.random() > .5,
+    rain: false,
+  };
+}
+
+function mkRain() {
+  return {
+    x: Math.random() * W, y: -20,
+    vx: 1.5, vy: Math.random() * 9 + 5,
+    color: '#223355',
+    len: Math.random() * 18 + 8,
+    alpha: Math.random() * .4 + .18,
+    decay: 0, rain: true,
+  };
+}
+
+function frame() {
+  ctx.clearRect(0, 0, W, H);
+
+  // draw stars
+  stars.forEach(s => {
+    s.phase += s.speed;
+    const a = (Math.sin(s.phase) + 1) / 2 * .7 + .1;
+    ctx.beginPath();
+    ctx.arc(s.x * W, s.y * H, s.r, 0, Math.PI * 2);
+    ctx.fillStyle = `rgba(255,255,255,${a})`;
+    ctx.fill();
+  });
+
+  // spawn
+  if (isConnected) { for (let i = 0; i < 5; i++) particles.push(mkConfetti()); }
+  else             { for (let i = 0; i < 3; i++) particles.push(mkRain()); }
+
+  // update + draw
+  particles = particles.filter(p => {
+    ctx.save();
+    ctx.globalAlpha = p.alpha;
+    if (p.rain) {
+      ctx.strokeStyle = p.color; ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.moveTo(p.x, p.y);
+      ctx.lineTo(p.x + p.vx * 2, p.y + p.vy * .35);
+      ctx.stroke();
+      p.x += p.vx; p.y += p.vy;
+    } else {
+      ctx.fillStyle = p.color;
+      p.spin += p.spinV;
+      ctx.translate(p.x, p.y); ctx.rotate(p.spin);
+      if (p.isRect) {
+        ctx.fillRect(-p.size * .5, -p.size * .25, p.size, p.size * .5);
+      } else {
+        ctx.beginPath();
+        ctx.arc(0, 0, p.size * .55, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      p.x += p.vx; p.y += p.vy;
+      p.vy += 0.07;
+      p.alpha -= p.decay;
+    }
+    ctx.restore();
+    if (p.rain) return p.y < H + 60 && p.x < W + 60;
+    return p.alpha > 0 && p.y < H + 60;
+  });
+
+  if (particles.length > 700) particles = particles.slice(-700);
+  requestAnimationFrame(frame);
+}
+frame();
+
+// ─── PUBLIC URL DETECTION ────────────────────────────────────────────────────
+(function detectPublicAccess() {
+  const hostname = window.location.hostname;
+  const isLocal  = hostname === 'localhost' || hostname === '127.0.0.1';
+  if (isLocal) return;
+
+  const banner  = document.getElementById('onlineBanner');
+  const urlEl   = document.getElementById('onlineUrl');
+  banner.classList.add('show');
+
+  let label;
+  if (hostname.includes('duckdns.org'))         label = '🦆 DuckDNS domain: ' + hostname;
+  else if (hostname.includes('amazonaws.com'))   label = '⚡ AWS ELB: ' + hostname;
+  else                                           label = '🌍 Public host: ' + hostname;
+
+  urlEl.textContent = label;
+  document.getElementById('infoAccess').textContent = hostname.includes('duckdns.org')
+    ? 'DuckDNS ✅' : hostname.includes('amazonaws.com')
+    ? 'ELB Direct ✅' : 'Public ✅';
+})();
+
+// ─── API ─────────────────────────────────────────────────────────────────────
+const sessionStart = Date.now();
+let firstConnect   = true;
+
+async function connect() {
+  try {
+    const [sRes, fRes, vRes] = await Promise.all([
+      fetch('/api/status'),
+      fetch('/api/facts'),
+      fetch('/api/vibe'),
+    ]);
+    if (!sRes.ok) throw new Error('offline');
+
+    const status = await sRes.json();
+    const fact   = await fRes.json();
+    const vibe   = await vRes.json();
+
+    isConnected = true;
+    document.body.classList.remove('sad');
+
+    document.getElementById('dot').classList.remove('off');
+    document.getElementById('statusLabel').textContent = '🚀 CONNECTED — ALL SYSTEMS GO';
+    document.getElementById('reconnectBlink').style.display = 'none';
+
+    document.getElementById('infoPod').textContent    = status.pod       || 'unknown';
+    document.getElementById('infoNs').textContent     = status.namespace || 'default';
+    document.getElementById('infoNode').textContent   = status.node      || 'unknown';
+    document.getElementById('infoRegion').textContent = status.region    || 'unknown';
+
+    const hostname = window.location.hostname;
+    const isLocal  = hostname === 'localhost' || hostname === '127.0.0.1';
+    if (isLocal) document.getElementById('infoAccess').textContent = 'localhost (local)';
+
+    typeWriter(fact.fact, document.getElementById('factBody'));
+    document.getElementById('factCounter').textContent = `FACT ${fact.index} OF ${fact.total}`;
+
+    setTimeout(() => {
+      document.getElementById('vibeBar').style.width = vibe.level + '%';
+      document.getElementById('vibePct').textContent = vibe.level + '%';
+      document.getElementById('vibeMsg').textContent = vibe.emoji + '  ' + vibe.message;
+    }, 250);
+
+    if (firstConnect) {
+      firstConnect = false;
+      for (let i = 0; i < 180; i++) {
+        setTimeout(() => particles.push(mkConfetti(W / 2, H / 2, true)), i * 9);
+      }
+    }
+
+  } catch (_) {
+    isConnected = false;
+    document.body.classList.add('sad');
+    document.getElementById('dot').classList.add('off');
+    document.getElementById('statusLabel').textContent = '💀 BACKEND OFFLINE — #SAD';
+    document.getElementById('reconnectBlink').style.display = 'block';
+  }
+}
+
+function typeWriter(text, el, i = 0) {
+  el.textContent = '';
+  (function tick() {
+    if (i < text.length) { el.textContent += text[i++]; setTimeout(tick, 26); }
+  })();
+}
+
+// uptime clock
+setInterval(() => {
+  if (!isConnected) return;
+  const s  = Math.floor((Date.now() - sessionStart) / 1000);
+  const m  = Math.floor(s / 60);
+  const ss = String(s % 60).padStart(2, '0');
+  document.getElementById('infoUptime').textContent = m > 0 ? `${m}m ${ss}s` : `${s}s`;
+}, 1000);
+
+connect();
+setInterval(connect, 12000);
+</script>
+</body>
+</html>

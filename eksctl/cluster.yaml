@@ -1,0 +1,23 @@
+apiVersion: eksctl.io/v1alpha5
+kind: ClusterConfig
+
+metadata:
+  name: cloudpilot-cluster
+  region: us-east-1
+
+# Managed Node Group — AWS handles node OS patching, updates, and registration
+managedNodeGroups:
+  - name: workers
+    instanceType: t3.small   # ~$0.023/hr per node; use t3.medium if pods get OOMKilled
+    desiredCapacity: 2
+    minSize: 1
+    maxSize: 4
+    labels:
+      role: worker
+    tags:
+      k8s.io/cluster-autoscaler/enabled: "true"
+      k8s.io/cluster-autoscaler/cloudpilot-cluster: "owned"
+    # Allow SSH into nodes for debugging (optional — remove in production!)
+    # ssh:
+    #   allow: true
+    #   publicKeyName: YOUR_EC2_KEY_PAIR_NAME
