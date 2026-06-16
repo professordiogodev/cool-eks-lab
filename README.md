@@ -59,7 +59,7 @@
                              │ :80
                              ▼
 ┌───────────────────────────────────────────────────────────────┐
-│                  EKS CLUSTER  ·  us-east-1                    │
+│                  EKS CLUSTER  ·  eu-central-1                 │
 │                                                               │
 │  ┌──────────────────────┐          ┌──────────────────────┐   │
 │  │  frontend-service    │          │  backend-service     │   │
@@ -111,14 +111,14 @@ The backend **never needs to be publicly exposed** — only the frontend ELB is 
 
 ```bash
 kubectl config current-context
-# Should show something like: arn:aws:eks:us-east-1:123456789:cluster/cloudpilot-cluster
+# Should show something like: arn:aws:eks:eu-central-1:123456789:cluster/cloudpilot-cluster
 ```
 
 ```bash
 kubectl get nodes
 # NAME                                          STATUS   ROLES    AGE
-# ip-192-168-xx-xx.us-east-1.compute.internal   Ready    <none>   5m
-# ip-192-168-xx-xx.us-east-1.compute.internal   Ready    <none>   5m
+# ip-192-168-xx-xx.eu-central-1.compute.internal   Ready    <none>   5m
+# ip-192-168-xx-xx.eu-central-1.compute.internal   Ready    <none>   5m
 ```
 
 Both nodes must be `Ready` before continuing. If they're not, ask your instructor.
@@ -316,7 +316,7 @@ Find the `image:` line and replace `YOUR_REGISTRY`:
 
 ```yaml
 # ECR:
-image: 123456789.dkr.ecr.us-east-1.amazonaws.com/cloudpilot-backend:v1
+image: 123456789.dkr.ecr.eu-central-1.amazonaws.com/cloudpilot-backend:v1
 
 # DockerHub:
 image: YOUR_USERNAME/cloudpilot-backend:v1
@@ -380,7 +380,7 @@ kubectl get svc frontend-service
 
 ```
 NAME               TYPE           CLUSTER-IP     EXTERNAL-IP
-frontend-service   LoadBalancer   10.100.xx.xx   a1b2c3d4.us-east-1.elb.amazonaws.com
+frontend-service   LoadBalancer   10.100.xx.xx   a1b2c3d4.eu-central-1.elb.amazonaws.com
 ```
 
 The `EXTERNAL-IP` column shows your ELB hostname. It may say `<pending>` for 1–3 minutes while AWS provisions the load balancer — that's normal.
@@ -654,7 +654,7 @@ to run on Fargate (no EC2 nodes — fully serverless pods). Label the backend po
 
 ```bash
 aws sts get-caller-identity                              # who am I?
-aws eks list-clusters --region us-east-1                 # list EKS clusters
+aws eks list-clusters --region eu-central-1                 # list EKS clusters
 aws ecr get-login-password | docker login --username AWS \
   --password-stdin ACCOUNT.dkr.ecr.REGION.amazonaws.com # ECR auth
 aws ecr create-repository --repository-name NAME         # create ECR repo
